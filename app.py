@@ -1,5 +1,12 @@
+# ============================================================
+# app.py — YouTube Summarizer Backend
+# Uses: Groq API (free, fast), youtube-transcript-api 1.x
+# Supports: Cookie-based auth to bypass YouTube IP bans
+# ============================================================
+
 import os
 import re
+import tempfile
 import traceback
 import requests
 from flask import Flask, request, jsonify, render_template
@@ -16,11 +23,24 @@ from youtube_transcript_api._errors import (
 
 load_dotenv()
 
-import tempfile
+app = Flask(__name__)
 
-YOUTUBE_COOKIES = os.getenv("YOUTUBE_COOKIES", "").strip()
+GROQ_API_KEY    = os.getenv("GROQ_API_KEY", "").strip()
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
+YOUTUBE_COOKIES = os.getenv("YOUTUBE_COOKIES", "").strip()  # Cookie string from env
+MAX_TRANSCRIPT_CHARS = 12000
 
+
+# ─── Build YouTubeTranscriptApi client with cookies if available ──
 def get_ytt_client():
+    """
+    Returns a YouTubeTranscriptApi instance.
+    Uses cookies to bypass YouTube's IP ban on cloud servers.
+    Cookies can be provided via:
+      1. YOUTUBE_COOKIES env variable (for Render deployment)
+      2. cookies.txt file in project root (for local dev)
+    """
+    # Option 1: cookies from environment variable (Render)
     if YOUTUBE_COOKIES:
         try:
             tmp = tempfile.NamedTemporaryFile(
@@ -28,24 +48,23 @@ def get_ytt_client():
             )
             tmp.write(YOUTUBE_COOKIES)
             tmp.close()
-            print("[Cookies] Using cookies from environment variable")
+            print(f"[Cookies] Using cookies from environment variable")
             return YouTubeTranscriptApi(cookie_path=tmp.name)
         except Exception as e:
-            print(f"[Cookies] Failed: {e}")
+            print(f"[Cookies] Failed to use env cookies: {e}")
 
+    # Option 2: cookies.txt file in project root (local dev)
     cookies_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
     if os.path.exists(cookies_path):
-        print("[Cookies] Using cookies.txt file")
-        return YouTubeTranscriptApi(cookie_path=cookies_path)
+        try:
+            print(f"[Cookies] Using cookies.txt file")
+            return YouTubeTranscriptApi(cookie_path=cookies_path)
+        except Exception as e:
+            print(f"[Cookies] Failed to use cookies.txt: {e}")
 
-    print("[Cookies] No cookies — unauthenticated")
+    # No cookies — will work locally but may fail on cloud servers
+    print("[Cookies] No cookies found — using unauthenticated client")
     return YouTubeTranscriptApi()
-
-app = Flask(__name__)
-
-GROQ_API_KEY    = os.getenv("GROQ_API_KEY", "").strip()
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
-MAX_TRANSCRIPT_CHARS = 39998
 
 
 # ─── Extract YouTube video ID ─────────────────────────────────
@@ -100,17 +119,8 @@ def entries_to_text(entries) -> str:
     return " ".join(p.strip() for p in parts if p.strip())
 
 
-# ─── Fetch transcript — returns text + language info ──────────
+# ─── Fetch transcript ─────────────────────────────────────────
 def fetch_transcript(video_id: str) -> dict:
-    """
-    Returns:
-      {
-        "text":          str,   # transcript text (original language)
-        "language":      str,   # e.g. "en", "hi"
-        "language_name": str,   # e.g. "English", "Hindi"
-        "is_english":    bool,
-      }
-    """
     ytt = get_ytt_client()
 
     try:
@@ -120,9 +130,16 @@ def fetch_transcript(video_id: str) -> dict:
     except TranscriptsDisabled:
         raise Exception("Transcripts are disabled for this video.")
     except Exception as e:
-        raise Exception(f"Could not access video: {e}")
+        msg = str(e)
+        if "IP" in msg or "blocked" in msg.lower() or "cookie" in msg.lower():
+            raise Exception(
+                "YouTube is blocking this server's IP. "
+                "Please add YouTube cookies in Render environment variables. "
+                "See README for instructions."
+            )
+        raise Exception(f"Could not access video: {msg}")
 
-    # ── Try English first ─────────────────────────────────────
+    # Try English first
     try:
         t    = transcript_list.find_transcript(["en", "en-US", "en-GB"])
         text = entries_to_text(t.fetch())
@@ -135,9 +152,9 @@ def fetch_transcript(video_id: str) -> dict:
                 "is_english":    True,
             }
     except Exception as e:
-        print(f"[Transcript] No English transcript: {e}")
+        print(f"[Transcript] No English: {e}")
 
-    # ── Try any available language ────────────────────────────
+    # Try any available language
     for t in transcript_list:
         lang      = t.language_code
         lang_name = t.language
@@ -146,7 +163,6 @@ def fetch_transcript(video_id: str) -> dict:
             text = entries_to_text(t.fetch())
             if not text.strip():
                 continue
-
             print(f"[Transcript] ✓ Got {lang} ({lang_name}) — {len(text)} chars")
             return {
                 "text":          text[:MAX_TRANSCRIPT_CHARS],
@@ -163,31 +179,20 @@ def fetch_transcript(video_id: str) -> dict:
 
 # ─── Call Groq API ────────────────────────────────────────────
 def generate_summary_with_groq(transcript_data: dict) -> dict:
-    """
-    Sends transcript to Groq (llama-3.3-70b).
-    If transcript is non-English, instructs Groq to:
-      - Summarize in English
-      - Also provide the original language transcript snippet
-    """
     if not GROQ_API_KEY or not GROQ_API_KEY.startswith("gsk_"):
         raise Exception(
             "Invalid or missing GROQ_API_KEY. "
             "Get your free key at https://console.groq.com/keys"
         )
 
-    transcript    = transcript_data["text"]
-    is_english    = transcript_data["is_english"]
-    lang_name     = transcript_data["language_name"]
-    lang_code     = transcript_data["language"]
+    transcript = transcript_data["text"]
+    is_english = transcript_data["is_english"]
+    lang_name  = transcript_data["language_name"]
+    lang_code  = transcript_data["language"]
 
-    # Add translation instruction if transcript is not English
     lang_note = ""
     if not is_english:
-        lang_note = f"""
-IMPORTANT: This transcript is in {lang_name}. 
-- Write ALL summaries and analysis in ENGLISH
-- After the ### ORIGINAL TRANSCRIPT section, include the first 300 words of the original {lang_name} transcript as-is
-"""
+        lang_note = f"\nIMPORTANT: This transcript is in {lang_name}. Write ALL summaries in ENGLISH. After the ### ORIGINAL TRANSCRIPT section, include the first 300 words of the original {lang_name} transcript.\n"
 
     prompt = f"""Analyze the following YouTube video transcript and provide a structured summary.
 {lang_note}
@@ -214,38 +219,25 @@ TRANSCRIPT ({lang_name}):
 {transcript}"""
 
     try:
-        client = Groq(api_key=GROQ_API_KEY)
-
+        client   = Groq(api_key=GROQ_API_KEY)
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "You are an expert multilingual content summarizer. "
-                        "You can understand any language and always produce "
-                        "summaries in clear English. Follow formatting instructions exactly."
-                    )
+                    "content": "You are an expert multilingual content summarizer. Always produce summaries in clear English. Follow formatting instructions exactly."
                 },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                {"role": "user", "content": prompt}
             ],
             temperature=0.3,
             max_tokens=2048,
         )
-
         raw_text = response.choices[0].message.content
         print(f"[Groq] ✓ Response ({len(raw_text)} chars)")
-
         result = parse_summary_response(raw_text)
-
-        # Add language metadata to response
         result["transcript_language"]      = lang_name
         result["transcript_language_code"] = lang_code
         result["was_translated"]           = not is_english
-
         return result
 
     except Exception as e:
@@ -257,14 +249,14 @@ TRANSCRIPT ({lang_name}):
         raise Exception(f"Groq API error: {err}")
 
 
-# ─── Parse Groq's structured response ────────────────────────
+# ─── Parse Groq response ──────────────────────────────────────
 def parse_summary_response(text: str) -> dict:
     result = {
         "short_summary":        "",
         "detailed_summary":     "",
         "bullet_points":        [],
         "actionable_insights":  [],
-        "original_transcript":  "",   # Original language snippet
+        "original_transcript":  "",
     }
 
     def parse_list(content: str) -> list:
@@ -291,11 +283,9 @@ def parse_summary_response(text: str) -> dict:
         elif any(k in header for k in ("ACTIONABLE", "INSIGHT", "TAKEAWAY")):
             result["actionable_insights"] = parse_list(content)
         elif "ORIGINAL TRANSCRIPT" in header:
-            # Don't include "N/A" placeholder
             if content and not content.startswith("N/A"):
                 result["original_transcript"] = content
 
-    # Fallback
     if not any([result["short_summary"], result["detailed_summary"]]):
         result["short_summary"]    = text[:600]
         result["detailed_summary"] = text
@@ -303,13 +293,12 @@ def parse_summary_response(text: str) -> dict:
     return result
 
 
-# ─── ROUTE: Home ──────────────────────────────────────────────
+# ─── ROUTES ──────────────────────────────────────────────────
 @app.route("/")
 def index():
     return render_template("index.html")
 
 
-# ─── ROUTE: Summarize ─────────────────────────────────────────
 @app.route("/summarize", methods=["POST"])
 def summarize():
     try:
@@ -324,7 +313,7 @@ def summarize():
         video_id = extract_video_id(url)
         if not video_id:
             return jsonify({"error": (
-                "Invalid YouTube URL. Supported:\n"
+                "Invalid YouTube URL. Supported formats:\n"
                 "• youtube.com/watch?v=ID\n"
                 "• youtu.be/ID\n"
                 "• youtube.com/shorts/ID"
@@ -338,7 +327,7 @@ def summarize():
 
         print(f"[Request] lang={transcript_data['language_name']}, words={word_count}")
 
-        if word_count < 10:
+        if word_count < 30:
             return jsonify({"error": "Transcript is too short to summarize."}), 400
 
         summary = generate_summary_with_groq(transcript_data)
@@ -357,7 +346,6 @@ def summarize():
         return jsonify({"error": str(e)}), 500
 
 
-# ─── ROUTE: Health check ──────────────────────────────────────
 @app.route("/health")
 def health():
     key_ok = bool(GROQ_API_KEY) and GROQ_API_KEY.startswith("gsk_")
@@ -366,8 +354,10 @@ def health():
         "groq_configured":        key_ok,
         "groq_key_prefix":        (GROQ_API_KEY[:12] + "...") if GROQ_API_KEY else "NOT SET",
         "youtube_api_configured": bool(YOUTUBE_API_KEY) and not YOUTUBE_API_KEY.startswith("your_"),
+        "cookies_configured":     bool(YOUTUBE_COOKIES) or os.path.exists("cookies.txt"),
     })
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port)
