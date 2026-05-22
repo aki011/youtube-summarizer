@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YT Summarizer — AI-Powered Video Insights</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <!-- Google Fonts: Syne (display) + DM Sans (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- ── TOAST NOTIFICATION ─────────────────────── -->
+  <div id="toast" class="toast" role="alert" aria-live="polite"></div>
+
+  <!-- ── HEADER ─────────────────────────────────── -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">▶</span>
+        <span class="logo-text">YT<em>Summarizer</em></span>
+      </div>
+      <p class="header-tagline">Drop a YouTube link. Get instant AI-powered insights.</p>
+    </div>
+  </header>
+
+  <!-- ── MAIN CONTENT ───────────────────────────── -->
+  <main class="main-content">
+
+    <!-- INPUT CARD -->
+    <section class="input-section">
+      <div class="input-card">
+        <label for="youtubeUrl" class="input-label">YouTube URL</label>
+        <div class="input-row">
+          <div class="input-wrapper">
+            <span class="input-icon">🔗</span>
+            <input
+              type="text"
+              id="youtubeUrl"
+              class="url-input"
+              placeholder="https://www.youtube.com/watch?v=..."
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button class="clear-btn" id="clearBtn" title="Clear input" aria-label="Clear input">✕</button>
+          </div>
+          <button class="summarize-btn" id="summarizeBtn">
+            <span class="btn-text">Generate Summary</span>
+            <span class="btn-icon">→</span>
+          </button>
+        </div>
+        <!-- Sample URLs for quick testing -->
+        <div class="sample-urls">
+          <span class="sample-label">Try:</span>
+          <button class="sample-pill" data-url="https://www.youtube.com/watch?v=dQw4w9WgXcQ">Rick Astley</button>
+          <button class="sample-pill" data-url="https://www.youtube.com/watch?v=JGwWNGJdvx8">TED Talk</button>
+          <button class="sample-pill" data-url="https://www.youtube.com/watch?v=aircAruvnKk">3Blue1Brown</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOADING STATE -->
+    <section class="loading-section hidden" id="loadingSection">
+      <div class="loader-card">
+        <div class="spinner-ring">
+          <div></div><div></div><div></div><div></div>
+        </div>
+        <p class="loader-title">Analyzing video…</p>
+        <p class="loader-step" id="loaderStep">Fetching transcript</p>
+        <div class="loader-progress">
+          <div class="loader-bar" id="loaderBar"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESULTS SECTION -->
+    <section class="results-section hidden" id="resultsSection">
+
+      <!-- Video Info Card -->
+      <div class="video-card" id="videoCard">
+        <div class="video-thumbnail-wrap">
+          <img id="videoThumbnail" src="" alt="Video thumbnail" class="video-thumbnail" />
+          <span class="play-badge">▶</span>
+        </div>
+        <div class="video-info">
+          <h2 class="video-title" id="videoTitle">Video Title</h2>
+          <p class="video-meta" id="videoMeta"></p>
+          <p class="lang-badge hidden" id="langBadge"></p>
+          <div class="video-actions">
+            <button class="action-btn" id="downloadBtn" title="Download summary as TXT">
+              ⬇ Download TXT
+            </button>
+            <button class="action-btn action-btn--outline" id="copyAllBtn" title="Copy full summary">
+              ⎘ Copy All
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary Grid -->
+      <div class="summary-grid">
+
+        <!-- Short Summary -->
+        <div class="summary-card card--short">
+          <div class="card-header">
+            <div class="card-badge badge--red">⚡ Quick Take</div>
+            <button class="copy-btn" data-target="shortSummaryText" title="Copy short summary">⎘</button>
+          </div>
+          <p class="card-body" id="shortSummaryText"></p>
+        </div>
+
+        <!-- Detailed Summary -->
+        <div class="summary-card card--detail">
+          <div class="card-header">
+            <div class="card-badge badge--blue">📄 Full Summary</div>
+            <button class="copy-btn" data-target="detailedSummaryText" title="Copy detailed summary">⎘</button>
+          </div>
+          <div class="card-body" id="detailedSummaryText"></div>
+        </div>
+
+        <!-- Key Bullet Points -->
+        <div class="summary-card card--bullets">
+          <div class="card-header">
+            <div class="card-badge badge--green">🔑 Key Points</div>
+            <button class="copy-btn" data-target="bulletPointsList" title="Copy bullet points">⎘</button>
+          </div>
+          <ul class="bullet-list" id="bulletPointsList"></ul>
+        </div>
+
+        <!-- Actionable Insights -->
+        <div class="summary-card card--insights">
+          <div class="card-header">
+            <div class="card-badge badge--amber">🚀 Action Items</div>
+            <button class="copy-btn" data-target="actionableList" title="Copy action items">⎘</button>
+          </div>
+          <ol class="insight-list" id="actionableList"></ol>
+        </div>
+
+        <!-- Original Transcript (shown only for non-English videos) -->
+        <div class="summary-card card--original hidden" id="originalTranscriptCard">
+          <div class="card-header">
+            <div class="card-badge badge--purple">🌐 Original Transcript <span id="originalLangBadge"></span></div>
+            <button class="copy-btn" data-target="originalTranscriptText" title="Copy original transcript">⎘</button>
+          </div>
+          <div class="card-body original-text" id="originalTranscriptText"></div>
+        </div>
+
+      </div><!-- /.summary-grid -->
+
+      <!-- New Summary Button -->
+      <div class="reset-row">
+        <button class="reset-btn" id="resetBtn">← Summarize Another Video</button>
+      </div>
+
+    </section><!-- /#resultsSection -->
+
+  </main>
+
+  <!-- ── FOOTER ─────────────────────────────────── -->
+  <footer class="site-footer">
+    <p>Built with Flask + Gemini 1.5 Flash · <a href="/health" target="_blank">API Status</a></p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
