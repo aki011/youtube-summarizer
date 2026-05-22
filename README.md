@@ -4,6 +4,8 @@ An AI-powered web app that generates instant English summaries of YouTube videos
 
 Built with: **Python Flask** · **HTML/CSS/JS** · **Groq API (LLaMA 3.3 70B)** · **YouTube Transcript API**
 
+🌐 **Live Demo:** [https://youtube-summarizer-thr5.onrender.com](https://youtube-summarizer-thr5.onrender.com)
+
 ---
 
 ## 📸 Screenshots & Demo
@@ -24,6 +26,8 @@ A multi-paragraph "Full Summary" offers an in-depth analytical breakdown of the 
 The app extracts structural key bullets, actionable insights, and embeds the source transcript below for reference.
 <img src="./static/images/Screenshot%204.png" width="800" alt="Key points and actionable insights">
 
+---
+
 ## ✨ Features
 
 - 🔗 Paste any YouTube URL — get a full AI summary in seconds
@@ -43,9 +47,10 @@ The app extracts structural key bullets, actionable insights, and embeds the sou
 
 ## 🚀 Quick Setup (5 minutes)
 
-### 1. Clone / Download the project
+### 1. Clone the repository
 
 ```bash
+git clone https://github.com/aki011/youtube-summarizer.git
 cd youtube-summarizer
 ```
 
@@ -63,13 +68,12 @@ venv\Scripts\activate           # Windows
 
 ```bash
 pip install -r requirements.txt
-pip install httpx==0.27.2       # Required for Groq SDK compatibility
 ```
 
 ### 4. Get your FREE Groq API key
 
 1. Go to [https://console.groq.com/keys](https://console.groq.com/keys)
-2. Sign in with Google (free, no credit card)
+2. Sign in with Google (free, no credit card needed)
 3. Click **"Create API Key"**
 4. Copy the key — it starts with `gsk_...`
 
@@ -98,6 +102,35 @@ Open your browser at: **http://localhost:5000**
 
 ---
 
+## ☁️ Deployment (Render)
+
+This app is deployed on [Render](https://render.com) (free tier).
+
+| Field | Value |
+|---|---|
+| Runtime | Python 3 |
+| Build Command | `pip install -r requirements.txt && pip install gunicorn==21.2.0` |
+| Start Command | `gunicorn app:app` |
+| Instance Type | Free |
+
+**Environment Variables to set on Render:**
+```
+GROQ_API_KEY = gsk_your_key_here
+YOUTUBE_API_KEY = your_key_here   (optional)
+```
+
+To redeploy after changes:
+```bash
+git add .
+git commit -m "your update"
+git push
+```
+Render auto-redeploys on every push. ✅
+
+> **Note:** Free tier apps sleep after 15 min of inactivity. First request after sleep takes ~30 seconds to wake up.
+
+---
+
 ## 📁 Project Structure
 
 ```
@@ -105,8 +138,10 @@ youtube-summarizer/
 │
 ├── app.py                  # Flask backend — routing, transcript fetch, Groq API
 ├── requirements.txt        # Python dependencies
+├── Procfile                # Render/Heroku start command
 ├── .env.example            # Environment variable template
 ├── .env                    # Your actual API keys (never commit this!)
+├── .gitignore              # Excludes venv, .env from git
 ├── README.md               # This file
 │
 ├── templates/
@@ -190,7 +225,6 @@ JSON response → JavaScript renders all 5 sections
 **`ModuleNotFoundError`**
 ```bash
 pip install -r requirements.txt
-pip install httpx==0.27.2
 ```
 
 **`Client.__init__() got an unexpected keyword argument 'proxies'`**
@@ -222,6 +256,7 @@ app.run(debug=True, port=5001)
 | httpx | 0.27.2 | HTTP client (Groq SDK dependency) |
 | python-dotenv | 1.0.1 | Load `.env` variables |
 | requests | 2.32.3 | YouTube metadata API calls |
+| gunicorn | 21.2.0 | Production WSGI server for deployment |
 
 ---
 
@@ -234,6 +269,12 @@ app.run(debug=True, port=5001)
 | Setup | Complex (quota, restrictions) | Simple — just paste key |
 | Model | Gemini 2.0 Flash | LLaMA 3.3 70B |
 | Key format | `AIza...` | `gsk_...` |
+
+---
+
+## 👨‍💻 Author
+
+**Akshay** · [github.com/aki011](https://github.com/aki011)
 
 ---
 
