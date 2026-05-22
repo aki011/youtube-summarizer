@@ -4,6 +4,9 @@ An AI-powered web app that generates instant English summaries of YouTube videos
 
 Built with: **Python Flask** · **HTML/CSS/JS** · **Groq API (LLaMA 3.3 70B)** · **YouTube Transcript API**
 
+This implementation focuses on rapid AI-assisted prototyping and edge deployment using Lovable AI infrastructure.
+
+
 🌐 **Live Demo:** [https://youtube-summarizer-thr5.onrender.com](https://youtube-summarizer-thr5.onrender.com)
 
 ---
