@@ -9,20 +9,20 @@ Built with: **Python Flask** · **HTML/CSS/JS** · **Groq API (LLaMA 3.3 70B)** 
 ## 📸 Screenshots & Demo
 
 ### 1. Analyzing Video State
-When a URL is submitted, the app securely fetches the captions and processes them through Gemini AI.
-<img src="static/images/screenshot 1.jpg" width="800" alt="Analyzing video loader">
+When a URL is submitted, the app securely fetches the captions and processes them through Groq LLaMA AI.
+<img src="./static/images/Screenshot%201.png" width="800" alt="Analyzing video loader">
 
 ### 2. Summary Generation & Quick Take
 Once processed, the application displays the video metadata alongside an instant 3-4 sentence "Quick Take" overview.
-<img src="static/images/screenshot 2.jpg" width="800" alt="Summary overview and quick take">
+<img src="./static/images/Screenshot%202.png" width="800" alt="Summary overview and quick take">
 
 ### 3. Comprehensive Breakdown
 A multi-paragraph "Full Summary" offers an in-depth analytical breakdown of the video's content structure.
-<img src="static/images/screenshot 3.jpg" width="800" alt="Detailed summary section">
+<img src="./static/images/Screenshot%203.png" width="800" alt="Detailed summary section">
 
 ### 4. Key Takeaways & Action Items
 The app extracts structural key bullets, actionable insights, and embeds the source transcript below for reference.
-<img src="static/images/screenshot 4.jpg" width="800" alt="Key points and actionable insights">
+<img src="./static/images/Screenshot%204.png" width="800" alt="Key points and actionable insights">
 
 ## ✨ Features
 
