@@ -1,9 +1,3 @@
-# ============================================================
-# app.py — YouTube Summarizer Backend
-# Uses: Groq API (free, fast), youtube-transcript-api 1.x
-# Supports: English summary from any language transcript
-# ============================================================
-
 import os
 import re
 import traceback
@@ -22,11 +16,36 @@ from youtube_transcript_api._errors import (
 
 load_dotenv()
 
+import tempfile
+
+YOUTUBE_COOKIES = os.getenv("YOUTUBE_COOKIES", "").strip()
+
+def get_ytt_client():
+    if YOUTUBE_COOKIES:
+        try:
+            tmp = tempfile.NamedTemporaryFile(
+                mode='w', suffix='.txt', delete=False, encoding='utf-8'
+            )
+            tmp.write(YOUTUBE_COOKIES)
+            tmp.close()
+            print("[Cookies] Using cookies from environment variable")
+            return YouTubeTranscriptApi(cookie_path=tmp.name)
+        except Exception as e:
+            print(f"[Cookies] Failed: {e}")
+
+    cookies_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
+    if os.path.exists(cookies_path):
+        print("[Cookies] Using cookies.txt file")
+        return YouTubeTranscriptApi(cookie_path=cookies_path)
+
+    print("[Cookies] No cookies — unauthenticated")
+    return YouTubeTranscriptApi()
+
 app = Flask(__name__)
 
 GROQ_API_KEY    = os.getenv("GROQ_API_KEY", "").strip()
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
-MAX_TRANSCRIPT_CHARS = 12000
+MAX_TRANSCRIPT_CHARS = 39998
 
 
 # ─── Extract YouTube video ID ─────────────────────────────────
@@ -92,7 +111,7 @@ def fetch_transcript(video_id: str) -> dict:
         "is_english":    bool,
       }
     """
-    ytt = YouTubeTranscriptApi()
+    ytt = get_ytt_client()
 
     try:
         transcript_list = ytt.list(video_id)
